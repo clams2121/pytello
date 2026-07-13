@@ -22,6 +22,7 @@ from pytello.exceptions import (
     TelloUnsupportedCapability,
 )
 from pytello.transport import _FilteringProtocol
+from pytello.video import Camera
 from tests.fakes import FakeEndpoint, scripted
 
 SDK_1_3_RESPONSES: dict[str, bytes | str | None] = {
@@ -335,6 +336,66 @@ async def test_stale_state_while_flying_triggers_connection_lost() -> None:
 # --------------------------------------------------------------------------
 # Source-IP filtering (transport layer)
 # --------------------------------------------------------------------------
+
+
+# --------------------------------------------------------------------------
+# Video control wiring
+# --------------------------------------------------------------------------
+
+
+async def test_start_video_sends_streamon_and_returns_stream() -> None:
+    video_endpoint = FakeEndpoint()
+    endpoint = FakeEndpoint(scripted(SDK_1_3_RESPONSES))
+    client = TelloClient(
+        command_endpoint=endpoint, state_endpoint=FakeEndpoint(), video_endpoint=video_endpoint
+    )
+    await client.connect()
+
+    stream = await client.start_video(camera=Camera.FRONT)
+    assert endpoint.sent[-1] == b"streamon"
+    assert stream.camera is Camera.FRONT
+
+    await client.stop_video()
+    assert endpoint.sent[-1] == b"streamoff"
+    assert video_endpoint.closed is True
+    await client.close()
+
+
+async def test_start_video_twice_without_stop_raises() -> None:
+    video_endpoint = FakeEndpoint()
+    endpoint = FakeEndpoint(scripted(SDK_1_3_RESPONSES))
+    client = TelloClient(
+        command_endpoint=endpoint, state_endpoint=FakeEndpoint(), video_endpoint=video_endpoint
+    )
+    await client.connect()
+    await client.start_video()
+    with pytest.raises(RuntimeError):
+        await client.start_video()
+    await client.close()
+
+
+async def test_start_video_down_camera_gated_on_sdk_1_3() -> None:
+    endpoint = FakeEndpoint(scripted(SDK_1_3_RESPONSES))
+    client = TelloClient(
+        command_endpoint=endpoint, state_endpoint=FakeEndpoint(), video_endpoint=FakeEndpoint()
+    )
+    await client.connect()
+    with pytest.raises(TelloUnsupportedCapability):
+        await client.start_video(camera=Camera.DOWN)
+    await client.close()
+
+
+async def test_start_video_down_camera_selects_downvision_on_sdk_3_0() -> None:
+    video_endpoint = FakeEndpoint()
+    endpoint = FakeEndpoint(scripted(SDK_3_0_RESPONSES))
+    client = TelloClient(
+        command_endpoint=endpoint, state_endpoint=FakeEndpoint(), video_endpoint=video_endpoint
+    )
+    await client.connect()
+    stream = await client.start_video(camera=Camera.DOWN)
+    assert b"downvision 1" in endpoint.sent
+    assert stream.camera is Camera.DOWN
+    await client.close()
 
 
 def test_filtering_protocol_drops_spoofed_source() -> None:

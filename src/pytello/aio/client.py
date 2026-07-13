@@ -31,6 +31,7 @@ from pytello.exceptions import (
 )
 from pytello.protocol import FlipDirection, ParsedResponse, ResponseKind, TelloState
 from pytello.transport import Endpoint, EndpointAddress, UdpEndpoint
+from pytello.video import Camera, VideoStream
 
 logger = logging.getLogger("pytello.client")
 
@@ -81,6 +82,7 @@ class TelloClient:
         on_connection_lost: Callable[[BaseException], None] | None = None,
         command_endpoint: Endpoint | None = None,
         state_endpoint: Endpoint | None = None,
+        video_endpoint: Endpoint | None = None,
     ) -> None:
         """Construct a client. This does not touch the network -- call
         :meth:`connect` (or use as an async context manager) to do that.
@@ -108,6 +110,8 @@ class TelloClient:
                 :class:`~pytello.transport.Endpoint` instead of opening a
                 real UDP socket. Leave as ``None`` in normal use.
             state_endpoint: Same, for the state telemetry channel.
+            video_endpoint: Same, for the video channel opened by
+                :meth:`start_video`.
         """
         self._drone_host = drone_host
         self._command_port = command_port
@@ -121,8 +125,11 @@ class TelloClient:
 
         self._command_endpoint: Endpoint | None = command_endpoint
         self._state_endpoint: Endpoint | None = state_endpoint
+        self._video_endpoint: Endpoint | None = video_endpoint
         self._owns_command_endpoint = command_endpoint is None
         self._owns_state_endpoint = state_endpoint is None
+        self._owns_video_endpoint = video_endpoint is None
+        self._video_stream: VideoStream | None = None
 
         self._command_lock = asyncio.Lock()
         self._connected = False
@@ -264,6 +271,10 @@ class TelloClient:
         close owned sockets. Safe to call more than once."""
         if not self._connected:
             return
+
+        if self._video_stream is not None:
+            await self._video_stream.close()
+            self._video_stream = None
 
         if self._flying:
             try:
@@ -658,3 +669,53 @@ class TelloClient:
         if down:
             require_camera_switching(self.capabilities)
         await self._execute(protocol.cmd_downvision(down))
+
+    async def start_video(self, camera: Camera = Camera.FRONT) -> VideoStream:
+        """Start streaming video from ``camera`` and return a
+        :class:`~pytello.video.VideoStream` for reading decoded frames.
+
+        Only one camera streams at a time; call :meth:`stop_video` before
+        starting a new one (e.g. to switch cameras).
+
+        Raises:
+            RuntimeError: a video stream is already active on this client.
+            TelloUnsupportedCapability: ``camera=Camera.DOWN`` requires
+                SDK 3.0 -- see :meth:`select_camera_source`.
+        """
+        if self._video_stream is not None:
+            raise RuntimeError("A video stream is already active; call stop_video() first")
+
+        if camera is Camera.DOWN:
+            await self.select_camera_source(down=True)
+        elif self.capabilities.camera_switching:
+            # Standard Tello (SDK 1.3) only has the front camera and
+            # doesn't recognize downvision at all; nothing to select.
+            await self.select_camera_source(down=False)
+
+        await self.stream_on()
+
+        if self._video_endpoint is None:
+            self._video_endpoint = UdpEndpoint(
+                EndpointAddress(
+                    local_port=self._video_port,
+                    remote_host=self._drone_host,
+                    remote_port=self._video_port,
+                ),
+                channel_name="video",
+            )
+        if self._owns_video_endpoint:
+            await self._video_endpoint.open()
+
+        stream = VideoStream(self._video_endpoint, camera)
+        stream._start()
+        self._video_stream = stream
+        return stream
+
+    async def stop_video(self) -> None:
+        """Stop the active video stream, if any, and disable streaming on
+        the drone. Safe to call when no stream is active."""
+        if self._video_stream is None:
+            return
+        await self._video_stream.close()
+        self._video_stream = None
+        await self.stream_off()

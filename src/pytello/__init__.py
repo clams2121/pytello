@@ -15,6 +15,7 @@ from pytello.exceptions import (
     TelloValidationError,
 )
 from pytello.protocol import FlipDirection, TelloState
+from pytello.video import Camera, VideoStats, VideoStream
 
 __version__ = "0.1.0"
 
@@ -28,5 +29,8 @@ __all__ = [
     "TelloNotFlyingError",
     "FlipDirection",
     "TelloState",
+    "Camera",
+    "VideoStream",
+    "VideoStats",
     "__version__",
 ]
