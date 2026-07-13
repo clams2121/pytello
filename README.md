@@ -15,10 +15,35 @@ anything platform-specific where practical.
 
 ## Install
 
+This package is **not yet published to PyPI**, so `pip install pytello-core`
+does not work yet. Until it is, install from source:
+
+```bash
+# From a local clone (editable install, picks up edits without reinstalling):
+git clone https://github.com/clams2121/pytello.git
+cd pytello
+pip install -e .
+# Add the examples extra (opencv-python) if you want to run examples/:
+pip install -e ".[examples]"
+```
+
+```bash
+# Directly from GitHub, no local clone needed:
+pip install "git+https://github.com/clams2121/pytello.git@main"
+```
+
+```bash
+# Or build a wheel yourself and install that:
+pip install build
+python -m build
+pip install dist/pytello_core-*.whl
+```
+
+Once this package is published to PyPI, the install will be the usual:
+
 ```bash
 pip install pytello-core
-# Only needed for the example scripts (video display, keyboard control):
-pip install pytello-core[examples]
+pip install pytello-core[examples]  # adds opencv-python, for the examples only
 ```
 
 Core dependencies are `av` (PyAV, for H.264 decode) and `numpy`.
