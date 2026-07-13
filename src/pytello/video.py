@@ -13,7 +13,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from enum import Enum
 
@@ -148,21 +148,21 @@ class VideoStream:
         """Running packet/frame/drop counters for this stream."""
         return self._stats
 
-    def __aiter__(self) -> AsyncIterator[NDArray[np.uint8]]:
+    def __aiter__(self) -> AsyncGenerator[NDArray[np.uint8], None]:
         queue: asyncio.Queue[NDArray[np.uint8]] = asyncio.Queue()
         self._frame_subscribers.append(queue)
         return self._frame_iterator(queue)
 
     async def _frame_iterator(
         self, queue: asyncio.Queue[NDArray[np.uint8]]
-    ) -> AsyncIterator[NDArray[np.uint8]]:
+    ) -> AsyncGenerator[NDArray[np.uint8], None]:
         try:
             while True:
                 yield await queue.get()
         finally:
             self._frame_subscribers.remove(queue)
 
-    async def raw_h264(self) -> AsyncIterator[bytes]:
+    async def raw_h264(self) -> AsyncGenerator[bytes, None]:
         """Async iterator of raw elementary-stream bytes as received,
         undecoded -- for piping to ffmpeg, recording to disk, etc."""
         queue: asyncio.Queue[bytes] = asyncio.Queue()
