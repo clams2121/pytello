@@ -73,6 +73,9 @@ class VideoStream:
     """
 
     def __init__(self, endpoint: Endpoint, camera: Camera) -> None:
+        """Wrap an already-open video :class:`~pytello.transport.Endpoint`.
+        Does not start receiving until :meth:`_start` is called by
+        ``TelloClient.start_video``."""
         self._endpoint = endpoint
         self.camera = camera
         self._codec = av.CodecContext.create("h264", "r")
@@ -88,15 +91,12 @@ class VideoStream:
         self._task = asyncio.create_task(self._run(), name="pytello-video")
 
     async def _run(self) -> None:
-        try:
-            while True:
-                data = await self._endpoint.receive()
-                self._stats.packets_received += 1
-                self._stats.bytes_received += len(data)
-                self._publish_raw(data)
-                self._decode(data)
-        except asyncio.CancelledError:
-            raise
+        while True:
+            data = await self._endpoint.receive()
+            self._stats.packets_received += 1
+            self._stats.bytes_received += len(data)
+            self._publish_raw(data)
+            self._decode(data)
 
     def _publish_raw(self, data: bytes) -> None:
         for queue in self._raw_subscribers:
@@ -149,6 +149,7 @@ class VideoStream:
         return self._stats
 
     def __aiter__(self) -> AsyncGenerator[NDArray[np.uint8], None]:
+        """Support ``async for frame in stream:`` -- see the class docstring."""
         queue: asyncio.Queue[NDArray[np.uint8]] = asyncio.Queue()
         self._frame_subscribers.append(queue)
         return self._frame_iterator(queue)

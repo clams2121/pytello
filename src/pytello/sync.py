@@ -53,11 +53,15 @@ class SyncVideoStream:
     """
 
     def __init__(self, async_stream: VideoStream, call: CoroRunner[Any]) -> None:
+        """Wrap an already-started :class:`~pytello.video.VideoStream`,
+        submitting its coroutines through ``call`` (the owning
+        :class:`Tello`'s background event loop)."""
         self._async_stream = async_stream
         self._call = call
 
     @property
     def camera(self) -> Camera:
+        """Which camera this stream is reading from."""
         return self._async_stream.camera
 
     @property
@@ -131,6 +135,13 @@ class Tello:
         on_connection_lost: Callable[[BaseException], None] | None = None,
         install_safety_handlers: bool = True,
     ) -> None:
+        """Start the background event loop and construct the underlying
+        :class:`~pytello.aio.client.TelloClient`. Does not touch the
+        network -- call :meth:`connect` (or use as a context manager) for
+        that. Parameters match ``TelloClient.__init__`` except
+        ``install_safety_handlers``, which enables the SIGINT/atexit
+        safety-net landing described in the class docstring.
+        """
         self._loop = asyncio.new_event_loop()
         loop_ready = threading.Event()
         self._thread = threading.Thread(
@@ -181,6 +192,9 @@ class Tello:
         try:
             self.close()
         except Exception:
+            # Best-effort only: this is the last chance to land before the
+            # process dies from the re-raised KeyboardInterrupt below, so
+            # log loudly rather than let a landing failure mask it.
             logger.exception("Safety-net landing during SIGINT handling failed")
         if self._signal_handler_installed and self._previous_sigint_handler is not None:
             signal.signal(signal.SIGINT, self._previous_sigint_handler)
@@ -193,9 +207,13 @@ class Tello:
         try:
             self.close()
         except Exception:
+            # Best-effort only: atexit callbacks that raise are reported by
+            # the interpreter but don't stop shutdown, so log loudly here
+            # rather than rely on that.
             logger.exception("Safety-net landing during atexit failed")
 
     def __enter__(self) -> Tello:
+        """Call :meth:`connect` and return ``self``."""
         self.connect()
         return self
 
@@ -205,6 +223,7 @@ class Tello:
         exc: BaseException | None,
         tb: TracebackType | None,
     ) -> None:
+        """Call :meth:`close`, regardless of whether the block raised."""
         self.close()
 
     # ----------------------------------------------------------------
@@ -213,18 +232,22 @@ class Tello:
 
     @property
     def capabilities(self) -> Capabilities:
+        """See :attr:`pytello.aio.client.TelloClient.capabilities`."""
         return self._client.capabilities
 
     @property
     def is_flying(self) -> bool:
+        """See :attr:`pytello.aio.client.TelloClient.is_flying`."""
         return self._client.is_flying
 
     @property
     def latest_state(self) -> TelloState | None:
+        """See :attr:`pytello.aio.client.TelloClient.latest_state`."""
         return self._client.latest_state
 
     @property
     def command_dropped_count(self) -> int:
+        """See :attr:`pytello.aio.client.TelloClient.command_dropped_count`."""
         return self._client.command_dropped_count
 
     # ----------------------------------------------------------------
@@ -232,6 +255,7 @@ class Tello:
     # ----------------------------------------------------------------
 
     def connect(self) -> None:
+        """See :meth:`pytello.aio.client.TelloClient.connect`."""
         self._call(self._client.connect())
 
     def close(self) -> None:
@@ -253,42 +277,55 @@ class Tello:
     # ----------------------------------------------------------------
 
     def takeoff(self) -> None:
+        """See :meth:`pytello.aio.client.TelloClient.takeoff`."""
         self._call(self._client.takeoff())
 
     def land(self) -> None:
+        """See :meth:`pytello.aio.client.TelloClient.land`."""
         self._call(self._client.land())
 
     def emergency(self) -> None:
+        """See :meth:`pytello.aio.client.TelloClient.emergency`."""
         self._call(self._client.emergency())
 
     def up(self, cm: int) -> None:
+        """See :meth:`pytello.aio.client.TelloClient.up`."""
         self._call(self._client.up(cm))
 
     def down(self, cm: int) -> None:
+        """See :meth:`pytello.aio.client.TelloClient.down`."""
         self._call(self._client.down(cm))
 
     def left(self, cm: int) -> None:
+        """See :meth:`pytello.aio.client.TelloClient.left`."""
         self._call(self._client.left(cm))
 
     def right(self, cm: int) -> None:
+        """See :meth:`pytello.aio.client.TelloClient.right`."""
         self._call(self._client.right(cm))
 
     def forward(self, cm: int) -> None:
+        """See :meth:`pytello.aio.client.TelloClient.forward`."""
         self._call(self._client.forward(cm))
 
     def back(self, cm: int) -> None:
+        """See :meth:`pytello.aio.client.TelloClient.back`."""
         self._call(self._client.back(cm))
 
     def cw(self, degrees: int) -> None:
+        """See :meth:`pytello.aio.client.TelloClient.cw`."""
         self._call(self._client.cw(degrees))
 
     def ccw(self, degrees: int) -> None:
+        """See :meth:`pytello.aio.client.TelloClient.ccw`."""
         self._call(self._client.ccw(degrees))
 
     def flip(self, direction: FlipDirection) -> None:
+        """See :meth:`pytello.aio.client.TelloClient.flip`."""
         self._call(self._client.flip(direction))
 
     def go(self, x: int, y: int, z: int, speed: int, mid: int | None = None) -> None:
+        """See :meth:`pytello.aio.client.TelloClient.go`."""
         self._call(self._client.go(x, y, z, speed, mid))
 
     def curve(
@@ -302,12 +339,15 @@ class Tello:
         speed: int,
         mid: int | None = None,
     ) -> None:
+        """See :meth:`pytello.aio.client.TelloClient.curve`."""
         self._call(self._client.curve(x1, y1, z1, x2, y2, z2, speed, mid))
 
     def rc(self, left_right: int, forward_back: int, up_down: int, yaw: int) -> None:
+        """See :meth:`pytello.aio.client.TelloClient.rc`."""
         self._call(self._client.rc(left_right, forward_back, up_down, yaw))
 
     def set_speed(self, speed: int) -> None:
+        """See :meth:`pytello.aio.client.TelloClient.set_speed`."""
         self._call(self._client.set_speed(speed))
 
     # ----------------------------------------------------------------
@@ -315,33 +355,43 @@ class Tello:
     # ----------------------------------------------------------------
 
     def get_speed(self) -> float:
+        """See :meth:`pytello.aio.client.TelloClient.get_speed`."""
         return self._call(self._client.get_speed())
 
     def get_battery(self) -> int:
+        """See :meth:`pytello.aio.client.TelloClient.get_battery`."""
         return self._call(self._client.get_battery())
 
     def get_flight_time(self) -> int:
+        """See :meth:`pytello.aio.client.TelloClient.get_flight_time`."""
         return self._call(self._client.get_flight_time())
 
     def get_wifi_snr(self) -> str:
+        """See :meth:`pytello.aio.client.TelloClient.get_wifi_snr`."""
         return self._call(self._client.get_wifi_snr())
 
     def get_height(self) -> int:
+        """See :meth:`pytello.aio.client.TelloClient.get_height`."""
         return self._call(self._client.get_height())
 
     def get_temperature(self) -> str:
+        """See :meth:`pytello.aio.client.TelloClient.get_temperature`."""
         return self._call(self._client.get_temperature())
 
     def get_attitude(self) -> str:
+        """See :meth:`pytello.aio.client.TelloClient.get_attitude`."""
         return self._call(self._client.get_attitude())
 
     def get_barometer(self) -> float:
+        """See :meth:`pytello.aio.client.TelloClient.get_barometer`."""
         return self._call(self._client.get_barometer())
 
     def get_acceleration(self) -> str:
+        """See :meth:`pytello.aio.client.TelloClient.get_acceleration`."""
         return self._call(self._client.get_acceleration())
 
     def get_tof(self) -> int:
+        """See :meth:`pytello.aio.client.TelloClient.get_tof`."""
         return self._call(self._client.get_tof())
 
     # ----------------------------------------------------------------
@@ -349,12 +399,15 @@ class Tello:
     # ----------------------------------------------------------------
 
     def mission_pad_on(self) -> None:
+        """See :meth:`pytello.aio.client.TelloClient.mission_pad_on`."""
         self._call(self._client.mission_pad_on())
 
     def mission_pad_off(self) -> None:
+        """See :meth:`pytello.aio.client.TelloClient.mission_pad_off`."""
         self._call(self._client.mission_pad_off())
 
     def mission_pad_direction(self, direction: int) -> None:
+        """See :meth:`pytello.aio.client.TelloClient.mission_pad_direction`."""
         self._call(self._client.mission_pad_direction(direction))
 
     # ----------------------------------------------------------------
@@ -362,17 +415,24 @@ class Tello:
     # ----------------------------------------------------------------
 
     def stream_on(self) -> None:
+        """See :meth:`pytello.aio.client.TelloClient.stream_on`."""
         self._call(self._client.stream_on())
 
     def stream_off(self) -> None:
+        """See :meth:`pytello.aio.client.TelloClient.stream_off`."""
         self._call(self._client.stream_off())
 
     def select_camera_source(self, down: bool) -> None:
+        """See :meth:`pytello.aio.client.TelloClient.select_camera_source`."""
         self._call(self._client.select_camera_source(down))
 
     def start_video(self, camera: Camera = Camera.FRONT) -> SyncVideoStream:
+        """See :meth:`pytello.aio.client.TelloClient.start_video`. Returns a
+        :class:`SyncVideoStream` rather than the async
+        :class:`~pytello.video.VideoStream`."""
         async_stream = self._call(self._client.start_video(camera))
         return SyncVideoStream(async_stream, self._call)
 
     def stop_video(self) -> None:
+        """See :meth:`pytello.aio.client.TelloClient.stop_video`."""
         self._call(self._client.stop_video())

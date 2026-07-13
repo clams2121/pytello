@@ -306,6 +306,7 @@ class TelloClient:
         self._connected = False
 
     async def __aenter__(self) -> TelloClient:
+        """Call :meth:`connect` and return ``self``."""
         await self.connect()
         return self
 
@@ -315,6 +316,7 @@ class TelloClient:
         exc: BaseException | None,
         tb: TracebackType | None,
     ) -> None:
+        """Call :meth:`close`, regardless of whether the block raised."""
         await self.close()
 
     # ----------------------------------------------------------------
@@ -382,59 +384,50 @@ class TelloClient:
     # ----------------------------------------------------------------
 
     async def _keepalive_loop(self) -> None:
-        try:
-            while True:
-                await asyncio.sleep(1.0)
-                if not self._flying or self._connection_lost_error is not None:
-                    continue
-                if self._command_lock.locked():
-                    continue  # an in-flight command already resets the drone's watchdog
-                elapsed = time.monotonic() - self._last_command_monotonic
-                if elapsed < self._keepalive_interval:
-                    continue
-                try:
-                    await self._execute(protocol.cmd_battery_query())
-                except TelloError as exc:
-                    logger.warning("Keepalive command failed: %s", exc)
-        except asyncio.CancelledError:
-            raise
+        while True:
+            await asyncio.sleep(1.0)
+            if not self._flying or self._connection_lost_error is not None:
+                continue
+            if self._command_lock.locked():
+                continue  # an in-flight command already resets the drone's watchdog
+            elapsed = time.monotonic() - self._last_command_monotonic
+            if elapsed < self._keepalive_interval:
+                continue
+            try:
+                await self._execute(protocol.cmd_battery_query())
+            except TelloError as exc:
+                logger.warning("Keepalive command failed: %s", exc)
 
     async def _state_loop(self) -> None:
         assert self._state_endpoint is not None
-        try:
-            while True:
-                raw = await self._state_endpoint.receive()
-                try:
-                    state = protocol.parse_state(raw)
-                except ValueError as exc:
-                    logger.warning("Discarding malformed state packet: %s", exc)
-                    continue
-                self._latest_state = state
-                self._last_state_monotonic = time.monotonic()
-                if self._on_state is not None:
-                    self._on_state(state)
-        except asyncio.CancelledError:
-            raise
+        while True:
+            raw = await self._state_endpoint.receive()
+            try:
+                state = protocol.parse_state(raw)
+            except ValueError as exc:
+                logger.warning("Discarding malformed state packet: %s", exc)
+                continue
+            self._latest_state = state
+            self._last_state_monotonic = time.monotonic()
+            if self._on_state is not None:
+                self._on_state(state)
 
     async def _state_watchdog_loop(self) -> None:
-        try:
-            while True:
-                await asyncio.sleep(1.0)
-                if not self._flying or self._connection_lost_error is not None:
-                    continue
-                if self._last_state_monotonic is None:
-                    continue
-                age = time.monotonic() - self._last_state_monotonic
-                if age > self._state_stale_timeout:
-                    self._handle_connection_lost(
-                        TelloConnectionError(
-                            f"No state telemetry received for {age:.1f}s while flying "
-                            f"(stale threshold {self._state_stale_timeout:.1f}s); "
-                            "connection presumed lost."
-                        )
+        while True:
+            await asyncio.sleep(1.0)
+            if not self._flying or self._connection_lost_error is not None:
+                continue
+            if self._last_state_monotonic is None:
+                continue
+            age = time.monotonic() - self._last_state_monotonic
+            if age > self._state_stale_timeout:
+                self._handle_connection_lost(
+                    TelloConnectionError(
+                        f"No state telemetry received for {age:.1f}s while flying "
+                        f"(stale threshold {self._state_stale_timeout:.1f}s); "
+                        "connection presumed lost."
                     )
-        except asyncio.CancelledError:
-            raise
+                )
 
     def _handle_connection_lost(self, error: BaseException) -> None:
         if self._connection_lost_error is not None:
@@ -549,7 +542,10 @@ class TelloClient:
         mid: int | None = None,
     ) -> None:
         """Fly a curve through relative waypoint 1 to relative waypoint 2 at
-        ``speed`` cm/s. See :meth:`go` for coordinate/speed ranges."""
+        ``speed`` cm/s. Coordinate ranges are as in :meth:`go`, but
+        ``speed`` here is 10-60 cm/s (narrower than every other
+        speed-taking command). If the resulting arc's radius is not
+        within 0.5-10 meters, the drone rejects the command."""
         self._require_flying()
         await self._execute(protocol.cmd_curve(x1, y1, z1, x2, y2, z2, speed, mid))
 
@@ -607,7 +603,14 @@ class TelloClient:
         return response.value or ""
 
     async def get_barometer(self) -> float:
-        """Query barometric altitude in meters."""
+        """Query barometric altitude.
+
+        Unit is unconfirmed: the official SDK 1.3 PDF's read-command table
+        says meters, but that same PDF's state-telemetry field description
+        says centimeters for the identical ``baro`` value, and the SDK 3.0
+        PDF's state description says meters again. Verify against your own
+        drone if the unit matters to you; see ``docs/protocol.md``.
+        """
         response = await self._execute(protocol.cmd_baro_query())
         return float(response.value) if response.value else 0.0
 

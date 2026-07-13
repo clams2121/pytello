@@ -93,6 +93,12 @@ class UdpEndpoint:
     """Real ``asyncio`` UDP socket implementing :class:`Endpoint`."""
 
     def __init__(self, address: EndpointAddress, channel_name: str) -> None:
+        """Construct without touching the network; call :meth:`open` to bind.
+
+        Args:
+            address: local bind port and the drone's remote host/port.
+            channel_name: used only for logging (e.g. ``"command"``).
+        """
         self._address = address
         self._channel_name = channel_name
         self._queue: asyncio.Queue[bytes] = asyncio.Queue()

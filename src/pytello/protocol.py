@@ -22,6 +22,10 @@ DEGREES_MIN = 1
 DEGREES_MAX = 360
 SPEED_MIN_CMS = 10
 SPEED_MAX_CMS = 100
+#: curve's speed range is narrower than go's -- confirmed in the SDK
+#: 1.3/2.0/3.0 PDFs, all of which state "speed: 10-60" for curve.
+CURVE_SPEED_MIN_CMS = 10
+CURVE_SPEED_MAX_CMS = 60
 RC_MIN = -100
 RC_MAX = 100
 
@@ -84,6 +88,16 @@ def validate_speed(speed: int) -> int:
     return speed
 
 
+def validate_curve_speed(speed: int) -> int:
+    """Validate the speed setting for ``curve`` in cm/s (10-60 -- narrower
+    than every other speed-taking command)."""
+    if not isinstance(speed, int) or isinstance(speed, bool):
+        _raise(f"speed must be an int, got {speed!r}")
+    if not (CURVE_SPEED_MIN_CMS <= speed <= CURVE_SPEED_MAX_CMS):
+        _raise(f"speed={speed} out of range [{CURVE_SPEED_MIN_CMS}, {CURVE_SPEED_MAX_CMS}] cm/s")
+    return speed
+
+
 def validate_rc_value(value: int, *, param_name: str) -> int:
     """Validate a single RC stick value (-100..100)."""
     if not isinstance(value, int) or isinstance(value, bool):
@@ -105,6 +119,13 @@ class FlipDirection(StrEnum):
 # --------------------------------------------------------------------------
 # Command formatting
 # --------------------------------------------------------------------------
+#
+# Each function below builds the exact wire string for one command,
+# running any client-side validation first. They're intentionally thin
+# and self-descriptive by name; full docs (units, ranges, SDK version,
+# exceptions) live on the validate_* functions above and on the
+# corresponding pytello.aio.client.TelloClient / pytello.Tello methods
+# that call these.
 
 
 def cmd_enter_sdk_mode() -> str:
@@ -180,7 +201,7 @@ def cmd_curve(
 ) -> str:
     validate_go_coordinates(x1, y1, z1)
     validate_go_coordinates(x2, y2, z2)
-    validate_speed(speed)
+    validate_curve_speed(speed)
     if mid is None:
         return f"curve {x1} {y1} {z1} {x2} {y2} {z2} {speed}"
     return f"curve {x1} {y1} {z1} {x2} {y2} {z2} {speed} m{mid}"
@@ -290,6 +311,8 @@ class ParsedResponse:
 
     @property
     def is_ok(self) -> bool:
+        """Whether the drone accepted the command (``ok`` or an info value,
+        as opposed to ``error``/``unknown command``/``out of range``/garbage)."""
         return self.kind in (ResponseKind.OK, ResponseKind.INFO)
 
 
@@ -406,6 +429,17 @@ _STATE_FLOAT_FIELDS = ("baro", "agx", "agy", "agz")
 @dataclass(frozen=True)
 class TelloState:
     """A single parsed state telemetry sample (~10 Hz on UDP port 8890).
+
+    Per the official SDK PDFs: ``pitch``/``roll``/``yaw`` in degrees,
+    ``vgx``/``vgy``/``vgz`` speed (dm/s per the SDK 3.0 PDF), ``templ``/
+    ``temph`` in Celsius, ``tof``/``h`` in cm, ``bat`` as a percentage,
+    ``time`` in seconds, ``agx``/``agy``/``agz`` acceleration (cm/s^2 per
+    the SDK 3.0 PDF; the SDK 1.3 PDF gives no unit for this field).
+    ``baro`` unit is ambiguous between the official PDFs themselves --
+    the SDK 1.3 PDF's read-command table says meters but that same PDF's
+    state-field description says centimeters for the identical value,
+    while the SDK 3.0 PDF's state-field description says meters. See
+    ``docs/protocol.md``.
 
     Mission-pad fields (``mid``, ``x``, ``y``, ``z``, ``mpry``) are only
     populated on SDK 2.0+ firmware with mission pad detection enabled

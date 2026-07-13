@@ -339,6 +339,63 @@ async def test_stale_state_while_flying_triggers_connection_lost() -> None:
 
 
 # --------------------------------------------------------------------------
+# Reads
+# --------------------------------------------------------------------------
+
+
+async def test_all_read_methods_parse_their_responses() -> None:
+    client, endpoint = await _connected_client(
+        {
+            "speed?": "15",
+            "battery?": "87",
+            "time?": "42",
+            "wifi?": "90",
+            "height?": "120",
+            "temp?": "60~70",
+            "attitude?": "pitch:0;roll:0;yaw:5",
+            "baro?": "101.3",
+            "acceleration?": "0.0 0.0 -1000.0",
+            "tof?": "80",
+        }
+    )
+
+    assert await client.get_speed() == 15.0
+    assert await client.get_battery() == 87
+    assert await client.get_flight_time() == 42
+    assert await client.get_wifi_snr() == "90"
+    assert await client.get_height() == 120
+    assert await client.get_temperature() == "60~70"
+    assert await client.get_attitude() == "pitch:0;roll:0;yaw:5"
+    assert await client.get_barometer() == pytest.approx(101.3)
+    assert await client.get_acceleration() == "0.0 0.0 -1000.0"
+    assert await client.get_tof() == 80
+
+    await client.close()
+
+
+async def test_mission_pad_commands_on_capable_drone() -> None:
+    client, endpoint = await _connected_client(SDK_3_0_RESPONSES)
+    await client.mission_pad_on()
+    assert endpoint.sent[-1] == b"mon"
+    await client.mission_pad_direction(2)
+    assert endpoint.sent[-1] == b"mdirection 2"
+    await client.mission_pad_off()
+    assert endpoint.sent[-1] == b"moff"
+    await client.close()
+
+
+async def test_set_speed_and_stream_on_off() -> None:
+    client, endpoint = await _connected_client()
+    await client.set_speed(50)
+    assert endpoint.sent[-1] == b"speed 50"
+    await client.stream_on()
+    assert endpoint.sent[-1] == b"streamon"
+    await client.stream_off()
+    assert endpoint.sent[-1] == b"streamoff"
+    await client.close()
+
+
+# --------------------------------------------------------------------------
 # Video control wiring
 # --------------------------------------------------------------------------
 

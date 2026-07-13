@@ -101,6 +101,36 @@ def test_get_battery_returns_int() -> None:
     tello.close()
 
 
+def test_full_delegation_surface() -> None:
+    tello, endpoint = _make_tello()
+    tello.connect()
+
+    assert tello.capabilities.sdk_version.value == "1.3"
+    assert tello.latest_state is None
+    assert tello.command_dropped_count == 0
+
+    tello.set_speed(50)
+    assert endpoint.sent[-1] == b"speed 50"
+
+    tello.takeoff()
+    tello.up(30)
+    tello.down(30)
+    tello.left(30)
+    tello.right(30)
+    tello.ccw(90)
+    tello.rc(0, 0, 0, 0)
+    tello.go(100, 100, 100, 50)
+    tello.curve(100, 0, 0, 200, 100, 0, 50)
+    tello.land()
+
+    tello.stream_on()
+    assert endpoint.sent[-1] == b"streamon"
+    tello.stream_off()
+    assert endpoint.sent[-1] == b"streamoff"
+
+    tello.close()
+
+
 def test_close_is_idempotent() -> None:
     tello, endpoint = _make_tello()
     tello.connect()

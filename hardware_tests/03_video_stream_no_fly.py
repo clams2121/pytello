@@ -16,7 +16,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _util import checklist, fail, report  # noqa: E402
-
 from pytello import Camera, Tello, TelloError, TelloUnsupportedCapability  # noqa: E402
 
 STREAM_DURATION_S = 8.0

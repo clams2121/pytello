@@ -17,7 +17,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _util import checklist, fail, report  # noqa: E402
-
 from pytello import Tello, TelloError  # noqa: E402
 
 WAIT_S = 25.0

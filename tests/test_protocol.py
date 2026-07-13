@@ -112,6 +112,16 @@ def test_curve_command_formats_and_validates() -> None:
         protocol.cmd_curve(100, 0, 0, 700, 100, 0, 50)
 
 
+def test_curve_speed_range_is_narrower_than_go() -> None:
+    # Confirmed against the official SDK 1.3/2.0/3.0 PDFs: curve's speed
+    # is 10-60 cm/s, unlike go's 10-100 cm/s.
+    assert protocol.cmd_curve(100, 0, 0, 200, 100, 0, 60) == "curve 100 0 0 200 100 0 60"
+    with pytest.raises(TelloValidationError):
+        protocol.cmd_curve(100, 0, 0, 200, 100, 0, 61)
+    with pytest.raises(TelloValidationError):
+        protocol.cmd_curve(100, 0, 0, 200, 100, 0, 100)
+
+
 def test_rc_command() -> None:
     assert cmd_rc(0, 0, 0, 0) == "rc 0 0 0 0"
     assert cmd_rc(-100, 100, -50, 50) == "rc -100 100 -50 50"
