@@ -170,3 +170,11 @@ pytest
 mypy --strict src/pytello
 ruff check src tests examples hardware_tests
 ```
+
+## Provenance
+
+This codebase was written by [Claude Code](https://claude.com/claude-code)
+(Anthropic) from a detailed design brief, and has not yet been flown
+against real hardware -- see `hardware_tests/` and the "Video" and
+"Troubleshooting" sections above for what to verify first. The original
+prompt is checked in at `docs/original_prompt.md` for reference.
